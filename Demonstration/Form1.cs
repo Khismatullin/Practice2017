@@ -169,7 +169,7 @@ namespace Demonstration
 
                 //--------------------- Building ----------------------------
                 
-                Plot.Model = new PlotModel { Title = "plot3 Score" };
+                Plot.Model = new PlotModel { Title = "plot3 Score" }; 
                 Plot.Dock = DockStyle.Fill;
                 
 
