@@ -167,18 +167,18 @@ namespace Demonstration
                 int ts = 1;
                 int tf = k;
 
-                //cusum parametrs(for trend)
-                double[] _ksi;
-                double[] _ita;
+                //CUSUM parameters
 
                 //a > 0, a + h < 0 (a < 0, a + h > 0)
                 double a = 1;
                 double h = a - 2;
+                double gamma = 1.0 / (h - Math.Abs(a));
+                double delta = 0.5;
 
                 //const C
                 double c;
 
-                //solution function - d(y[n]) = I(y[n] > C), yn = (y[n-1] + x[n]), y[0] = 0
+                //solution function - d(y[n]) = I(y[n] > C), y[n] = (y[n-1] + x[n]), y[0] = 0
                 bool d;
 
                 for (int u = 0; u < _pt.Count; u++)
@@ -197,15 +197,32 @@ namespace Demonstration
                     }
 
                     //-------- from book
+                    double[] _ksi = new double[tf - ts + 1 + 1];
+                    double[] _ita = new double[tf - ts + 1 + 1];
+
+                    //partial sums
                     double[] s = new double[x.Length];
                     s[0] = 0;
                     for (int j = 1; j < s.Length; j++)
                     {
                         for (int i = 0; i < j ; i++)
-                        {
                             s[j] += x[i];
+                    }                    
+
+                    double[] _y = new double[tf - ts + 1 + 1];
+                    double min = s[1];
+                    for (int i = 0; i < _y.Length; i++)
+                    {
+                        //min value s[r], where 0 < r < i
+                        for (int r = 0; r < i; r++)
+                        {
+                            if (s[r] < min)
+                                min = s[r];
                         }
+                        _y[i] = s[i] - min;
+                        min = s[1];
                     }
+                   
                     //--------
 
                     //find trend
