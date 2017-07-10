@@ -167,9 +167,84 @@ namespace Demonstration
                 int ts = 1;
                 int tf = k;
 
+                //cusum parametrs(for trend)
+                double[] _ksi;
+                double[] _ita;
+
+                //a > 0, a + h < 0 (a < 0, a + h > 0)
+                double a = 1;
+                double h = a - 2;
+
+                //const C
+                double c;
+
+                //solution function - d(y[n]) = I(y[n] > C), yn = (y[n-1] + x[n]), y[0] = 0
+                bool d;
+
+                for (int u = 0; u < _pt.Count; u++)
+                {
+                    double[] y = new double[tf - ts + 1 + 1];
+                    y[0] = 0;
+                    y[k] = 0;
+
+                    //X = {P(ts), P(ts+1), ... P(tf)}
+                    double[] x = new double[tf - ts + 1 + 1];
+                    int temp = ts;
+                    for (int i = 0 ; i < x.Length; i++)
+                    {
+                        x[i] = _pt[temp];
+                        temp++;
+                    }
+
+                    //-------- from book
+                    double[] s = new double[x.Length];
+                    s[0] = 0;
+                    for (int j = 1; j < s.Length; j++)
+                    {
+                        for (int i = 0; i < j ; i++)
+                        {
+                            s[j] += x[i];
+                        }
+                    }
+                    //--------
+
+                    //find trend
+                    foreach (var item in _pt)
+                    {
+                        for (int i = 0; i < x.Length; i++)
+                        {
+                            //cusum -- x[n] = a + ksi[n]*I + ita[n]*I
+
+
+                            _ft.Add(i, _pt[item.Key]);
+                        }
+                    }
+
+                    //remove trend estKsi(tf + 1) = P(tf + 1) - f(tf + 1)
+                    double[] estKsi = new double[tf - ts + 1 + 1];
+                    estKsi[tf + 1] = _pt[tf + 1] - _ft[tf + 1];
+
+                    double[] ksi = new double[tf - ts + 1 + 1];
+                    ksi[tf + 1] = estKsi[tf + 1] + b;
+
+                    y[tf + 1] = y[tf] + ksi[tf + 1];
+
+                    //check on d(y[t]) = I(y[t] < N)
+                    if (y[tf] < N)
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        ts += 1;
+                        tf += 1;
+                        //return on step 1
+                    }
+                }
+
                 //--------------------- Building ----------------------------
                 
-                Plot.Model = new PlotModel { Title = "plot3 Score" }; 
+                Plot.Model = new PlotModel { Title = "PLOT" }; 
                 Plot.Dock = DockStyle.Fill;
                 
 
