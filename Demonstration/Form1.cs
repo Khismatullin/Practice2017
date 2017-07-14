@@ -17,12 +17,13 @@ using ClosedXML.Excel;
 using System.IO;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using System.Threading;
 
 namespace Demonstration
 {
     public partial class Form1 : Form
     {
-        PlotView Plot = new PlotView();
+        static PlotView Plot = new PlotView();
 
         public Form1()
         {
@@ -33,20 +34,17 @@ namespace Demonstration
         private void Form1_Load(object sender, EventArgs e)
         {
             int x, y, w, z;
-            System.Threading.ThreadPool.GetMinThreads(out y, out x);
-            System.Threading.ThreadPool.SetMinThreads(8000, x);
-            System.Threading.ThreadPool.GetMaxThreads(out w, out z);
-            System.Threading.ThreadPool.SetMaxThreads(16000, z);
+            ThreadPool.GetMinThreads(out y, out x);
+            ThreadPool.SetMinThreads(100000, x);
+            ThreadPool.GetMaxThreads(out w, out z);
+            ThreadPool.SetMaxThreads(300000, z);
 
             Dictionary<double, double> dataExcel = new Dictionary<double, double>();
-            string directory = "D:\\Downloads\\Practice2017\\data1.xlsx";
+            string directory = "D:\\Downloads\\Practice2017\\data2.xlsx";
 
             Maket maket = new Maket(new ExcelBinding(dataExcel, directory), new GraphicsOxiPlot(dataExcel));
 
             maket.Output();
-            //Task ts = new Task(() => maket.Output());
-            //ts.Start();
-            //ts.Wait();
         }
 
         interface IDataBinding
@@ -67,6 +65,87 @@ namespace Demonstration
 
             public void Binding()
             {
+                //count measurement
+                int k = 20;
+
+                //critical value
+                double N = 0.02;
+
+                //max measurement error
+                double b = 0.025;
+
+                double sum = 0;
+                double max = 0;
+                double min = 0;
+                double[] average = new double[0];
+                double averageA = 0;
+                double[] x = new double[k];
+                double[] y = new double[1];
+                y[y.Length - 1] = 0;
+
+                double estKsi = 0.0;
+                double ksi = 0.0;
+
+                //upper and lower control limits
+                double[] upper = new double[1];
+                upper[0] = 0;
+                double[] lower = new double[1];
+                lower[0] = 0;
+                double sigma = 0.0;
+                double slack = 0.0;
+                double target = 0.0;
+                double[] r = new double[0];
+                double averageR = 0.0;
+                double[] cum = new double[1];
+                cum[0] = 0;
+                double[] s = new double[0];
+                double allsum = 0;
+                double[] cumPlus = new double[1];
+                cumPlus[0] = 0;
+                double[] cumMinus = new double[1];
+                cumMinus[0] = 0;
+
+                //v-mask
+                double h = 0.0;
+                double f = 0;
+                double sigmaE = 0.0;
+                double H = 0;
+                double F = 0;
+
+                //valuation standart deriviation
+                double sigma0 = 0.0;
+
+                Plot.Model = new PlotModel();
+                Plot.Dock = DockStyle.Fill;
+
+                Plot.Model.PlotType = PlotType.XY;
+                Plot.Model.Background = OxyColor.FromRgb(255, 255, 255);
+                Plot.Model.TextColor = OxyColor.FromRgb(0, 0, 0);
+
+                GraphicsOxiPlot.s1 = new LineSeries { Title = "P(t)", StrokeThickness = 1 };
+                GraphicsOxiPlot.s1.Color = OxyColor.FromRgb(255, 0, 0);//red
+                Plot.Model.Series.Add(GraphicsOxiPlot.s1);
+
+                GraphicsOxiPlot.s2 = new LineSeries { Title = "f(t)", StrokeThickness = 1 };
+                GraphicsOxiPlot.s2.Color = OxyColor.FromRgb(0, 255, 0);//green
+                Plot.Model.Series.Add(GraphicsOxiPlot.s2);
+
+                GraphicsOxiPlot.s3 = new LineSeries { Title = "", StrokeThickness = 1 };
+                GraphicsOxiPlot.s3.Color = OxyColor.FromRgb(0, 0, 255);//blue
+                Plot.Model.Series.Add(GraphicsOxiPlot.s3);
+
+                GraphicsOxiPlot.s4 = new LineSeries { Title = "", StrokeThickness = 1 };
+                GraphicsOxiPlot.s4.Color = OxyColor.FromRgb(255, 125, 255);//pink
+                Plot.Model.Series.Add(GraphicsOxiPlot.s4);
+
+                GraphicsOxiPlot.s5 = new LineSeries { Title = "", StrokeThickness = 1 };
+                GraphicsOxiPlot.s5.Color = OxyColor.FromRgb(200, 125, 255);//?
+                Plot.Model.Series.Add(GraphicsOxiPlot.s5);
+
+                GraphicsOxiPlot.s6 = new LineSeries { Title = "", StrokeThickness = 1 };
+                GraphicsOxiPlot.s6.Color = OxyColor.FromRgb(255, 125, 200);//?
+                Plot.Model.Series.Add(GraphicsOxiPlot.s6);
+
                 OpenFileDialog ofd = new OpenFileDialog();
                 ofd.DefaultExt = "*.xls;*.xlsx";
                 ofd.Filter = "Excel Sheet(*.xlsx)|*.xlsx";
@@ -77,7 +156,6 @@ namespace Demonstration
                 ExcelObj.Range ShtRange;
                 DataTable dt = new DataTable();
 
-                
                 ofd.FileName = _dir;
                 //if(ofd.ShowDialog() == DialogResult.OK)
 
@@ -89,38 +167,171 @@ namespace Demonstration
 
                 NwSheet = (ExcelObj.Worksheet)workbook.Sheets.get_Item(1);
                 ShtRange = NwSheet.UsedRange;
-                for (int Cnum = 1; Cnum <= ShtRange.Columns.Count; Cnum++)
-                {
-                    dt.Columns.Add(
-                       new DataColumn((ShtRange.Cells[1, Cnum] as ExcelObj.Range).Value2.ToString()));
-                }
-                dt.AcceptChanges();
 
-                string[] columnNames = new String[dt.Columns.Count];
-                for (int i = 0; i < dt.Columns.Count; i++)
+                Task task = new Task(() =>
                 {
-                    columnNames[0] = dt.Columns[i].ColumnName;
-                }
-
-                for (int Rnum = 2; Rnum <= ShtRange.Rows.Count; Rnum++)
-                {
-                    DataRow dr = dt.NewRow();
                     for (int Cnum = 1; Cnum <= ShtRange.Columns.Count; Cnum++)
                     {
-                        if ((ShtRange.Cells[Rnum, Cnum] as ExcelObj.Range).Value2 != null)
-                        {
-                            dr[Cnum - 1] =
-                (ShtRange.Cells[Rnum, Cnum] as ExcelObj.Range).Value2.ToString();
-                        }
+                        dt.Columns.Add(
+                           new DataColumn((ShtRange.Cells[1, Cnum] as ExcelObj.Range).Value2.ToString()));
                     }
-                    dt.Rows.Add(dr);
                     dt.AcceptChanges();
-                }
 
-                for (int m = 0; m < dt.Rows.Count; m++)
-                    _dic.Add(Convert.ToDouble(dt.Rows[m][0]), Convert.ToDouble(dt.Rows[m][1]));
+                    string[] columnNames = new String[dt.Columns.Count];
+                    for (int i = 0; i < dt.Columns.Count; i++)
+                    {
+                        columnNames[0] = dt.Columns[i].ColumnName;
+                    }
 
-                app.Quit();
+                    double temp1 = 0;
+                    double temp2 = 0;
+
+                    for (int Rnum = 2; Rnum <= ShtRange.Rows.Count; Rnum++)
+                    {
+                        DataRow dr = dt.NewRow();
+                        for (int Cnum = 1; Cnum <= ShtRange.Columns.Count; Cnum++)
+                        {
+                            if ((ShtRange.Cells[Rnum, Cnum] as ExcelObj.Range).Value2 != null)
+                            {
+                                dr[Cnum - 1] = (ShtRange.Cells[Rnum, Cnum] as ExcelObj.Range).Value2.ToString();
+
+                                if (temp1 == 0)
+                                    temp1 = Convert.ToDouble(dr[Cnum - 1]);
+                                else
+                                {
+                                    temp2 = Convert.ToDouble(dr[Cnum - 1]);
+                                }
+                            }
+                        }
+                        dt.Rows.Add(dr);
+                        dt.AcceptChanges();
+
+                        Plot.InvalidatePlot(true);
+                        GraphicsOxiPlot.s1.Points.Add(new DataPoint(temp1, temp2));
+                        _dic.Add(temp1, temp2);
+
+                        //at first X = {P(ts), P(ts+1), ... P(tf)}
+                        if (_dic.Count == k)
+                        {
+                            int ind = 0;
+                            foreach (var item in _dic)
+                            {
+                                if (ind < x.Length)
+                                {
+                                    x[ind] = _dic[item.Key];
+                                    ind++;
+                                }
+                            }
+                        }
+
+                        //trend, CUSUM
+                        if (_dic.Count > k && Rnum % 1 == 0)
+                        {
+                            //average(TREND) from set X                       
+                            Array.Resize(ref average, average.Length + 1);
+                            average[average.Length - 1] = x.Average();
+
+                            //average average
+                            averageA = average.Average();
+
+                            //target
+                            target = averageA;
+
+                            //v-mask
+                            H = h * sigmaE;
+                            F = f * sigmaE;
+
+                            allsum = 0;
+                            //sum of all _dic
+                            foreach (var item in _dic)
+                                allsum += item.Value - target;
+
+                            //partial sums of averages
+                            Array.Resize(ref s, s.Length + 1);
+                            s[s.Length - 1] = allsum;
+
+                            //cum
+                            Array.Resize(ref cum, cum.Length + 1);
+                            cum[cum.Length - 1] = s[s.Length - 1];
+
+                            //range
+                            max = x.Max();
+                            min = x.Min();
+                            Array.Resize(ref r, r.Length + 1);
+                            r[r.Length - 1] = max - min;
+
+                            //average range
+                            averageR = r.Average();
+                            sigma0 = averageR / 1.128;
+                            sigmaE = sigma0 / Math.Sqrt(x.Length);
+
+                            //remove trend E^(tf + 1) = P(tf + 1) - f(tf + 1)                            
+                            estKsi = _dic[temp1] - average[average.Length - 1];
+                            
+                            //find E[tf + 1] = E^[tf + 1] + b
+                            ksi = estKsi + b;
+
+                            //CUSUM -- y[tf + 1] = y[tf] + ksi
+                            Array.Resize(ref y, y.Length + 1);
+                            y[y.Length - 1] = y[y.Length - 2] + ksi;
+
+                            //standart deviation for limits
+                            sigma = average[average.Length - 1] / 1.128;
+                            slack = 0.5 * sigma;
+                            h = 4 * sigma;
+
+                            //cumPlus
+                            Array.Resize(ref cumPlus, cumPlus.Length + 1);
+                            cumPlus[cumPlus.Length - 1] = Math.Max(0, temp2 - target - slack + cumPlus[cumPlus.Length - 2]);
+
+                            //cumMinus
+                            Array.Resize(ref cumMinus, cumMinus.Length + 1);
+                            cumMinus[cumMinus.Length - 1] = Math.Max(0, target - slack - temp2 + cumMinus[cumMinus.Length - 2]);
+
+                            //upper control limit
+                            Array.Resize(ref upper, upper.Length + 1);
+                            upper[upper.Length - 1] = Math.Max(0, upper[upper.Length - 2] + temp2 - target - slack);
+
+                            //lower control limit
+                            Array.Resize(ref lower, lower.Length + 1);
+                            lower[lower.Length - 1] = Math.Min(0, lower[lower.Length - 2] + temp2 - target + slack);
+
+
+                            //check on d(y[t]) = I(y[t] < N), if d(y[t]) = 1 then STOP
+                            if (y[y.Length - 1] < N)
+                            {
+                                MessageBox.Show("Значение y("+ temp1 + ") = " + y[y.Length - 1] + " меньше, чем N = " + N + ".\nЗначение P(" + ((temp1 % 1) * 24) + ") = " + temp2, "Момент разладки");
+                                break;
+                            }
+                            else
+                            {
+                                //replace X = {P(ts), P(ts+1), ... P(tf)}
+                                int ind = 0;
+                                while(ind < x.Length - 1)
+                                {
+                                    x[ind] = x[ind + 1];
+                                    ind++;
+                                }
+                                if (ind == k - 1)
+                                    x[ind] = temp2;
+                            }                            
+                        }
+                        if (_dic.Count > k && _dic.Count % 1 == 0)
+                        {
+                            GraphicsOxiPlot.s2.Points.Add(new DataPoint(temp1, average[average.Length - 1]));
+                            //GraphicsOxiPlot.s3.Points.Add(new DataPoint(temp1, cum[cum.Length - 1]));
+                            //GraphicsOxiPlot.s4.Points.Add(new DataPoint(temp1, y[y.Length - 1]));
+                            //GraphicsOxiPlot.s5.Points.Add(new DataPoint(temp1, cumPlus[cumPlus.Length - 1]));
+                            //GraphicsOxiPlot.s6.Points.Add(new DataPoint(temp1, cumMinus[cumMinus.Length - 1]));
+                        }
+
+                        temp1 = 0;
+                        temp2 = 0;
+                    }
+
+                    app.Quit();
+                });
+                task.Start();
             }
         }
 
@@ -128,12 +339,15 @@ namespace Demonstration
         {
             void OutputGraphics();
         }
-
-        class GraphicsOxiPlot : Form1, IGraphics
+        
+        public class GraphicsOxiPlot : IGraphics
         {
-            private LineSeries s1;
-            private LineSeries s2;
-            private LineSeries s3;
+            static public LineSeries s1;
+            static public LineSeries s2;
+            static public LineSeries s3;
+            static public LineSeries s4;
+            static public LineSeries s5;
+            static public LineSeries s6;
 
             //values from binding (P(t))
             private Dictionary<double, double> _pt;
@@ -154,158 +368,10 @@ namespace Demonstration
 
             public void OutputGraphics()
             {
-                //count measurement
-                int k = 5;
-
-                //critical value
-                double N = -0.01;
-
-                //max measurement error
-                double b = 0.025;
-
-                //start and finish sequence
-                int ts = 1;
-                int tf = k;
-
-                //CUSUM parameters
-
-                //a > 0, a + h < 0 (a < 0, a + h > 0)
-                double a = 1;
-                double h = a - 2;
-                double gamma = 1.0 / (h - Math.Abs(a));
-                double delta = 0.5;
-
-                //const C
-                double c;
-
-                //solution function - d(y[n]) = I(y[n] > C), y[n] = (y[n-1] + x[n]), y[0] = 0
-                bool d;
-
-                for (int u = 0; u < _pt.Count; u++)
-                {
-                    double[] y = new double[tf - ts + 1 + 1];
-                    y[0] = 0;
-                    y[k] = 0;
-
-                    //X = {P(ts), P(ts+1), ... P(tf)}
-                    double[] x = new double[tf - ts + 1 + 1];
-                    int temp = ts;
-                    for (int i = 0 ; i < x.Length; i++)
-                    {
-                        x[i] = _pt[temp];
-                        temp++;
-                    }
-
-                    //-------- from book
-                    double[] _ksi = new double[tf - ts + 1 + 1];
-                    double[] _ita = new double[tf - ts + 1 + 1];
-
-                    //partial sums
-                    double[] s = new double[x.Length];
-                    s[0] = 0;
-                    for (int j = 1; j < s.Length; j++)
-                    {
-                        for (int i = 0; i < j ; i++)
-                            s[j] += x[i];
-                    }                    
-
-                    double[] _y = new double[tf - ts + 1 + 1];
-                    double min = s[1];
-                    for (int i = 0; i < _y.Length; i++)
-                    {
-                        //min value s[r], where 0 < r < i
-                        for (int r = 0; r < i; r++)
-                        {
-                            if (s[r] < min)
-                                min = s[r];
-                        }
-                        _y[i] = s[i] - min;
-                        min = s[1];
-                    }
-                   
-                    //--------
-
-                    //find trend
-                    foreach (var item in _pt)
-                    {
-                        for (int i = 0; i < x.Length; i++)
-                        {
-                            //cusum -- x[n] = a + ksi[n]*I + ita[n]*I
-
-
-                            _ft.Add(i, _pt[item.Key]);
-                        }
-                    }
-
-                    //remove trend estKsi(tf + 1) = P(tf + 1) - f(tf + 1)
-                    double[] estKsi = new double[tf - ts + 1 + 1];
-                    estKsi[tf + 1] = _pt[tf + 1] - _ft[tf + 1];
-
-                    double[] ksi = new double[tf - ts + 1 + 1];
-                    ksi[tf + 1] = estKsi[tf + 1] + b;
-
-                    y[tf + 1] = y[tf] + ksi[tf + 1];
-
-                    //check on d(y[t]) = I(y[t] < N)
-                    if (y[tf] < N)
-                    {
-                        break;
-                    }
-                    else
-                    {
-                        ts += 1;
-                        tf += 1;
-                        //return on step 1
-                    }
-                }
-
-                //--------------------- Building ----------------------------
+            #region CUSUM
                 
-                Plot.Model = new PlotModel { Title = "PLOT" }; 
-                Plot.Dock = DockStyle.Fill;
-                
-
-                Plot.Model.PlotType = PlotType.XY;
-                Plot.Model.Background = OxyColor.FromRgb(255, 255, 255);
-                Plot.Model.TextColor = OxyColor.FromRgb(0, 0, 0);
-
-                s1 = new LineSeries { Title = "P(t)", StrokeThickness = 1 };
-                s1.Color = OxyColor.FromRgb(255, 0, 0);//red
-
-                //foreach (var item in _pt)
-                //{
-                //    s1.Points.Add(new DataPoint(item.Key, item.Value));
-                //}
-
-                Plot.Model.Series.Add(s1);
-
-                s2 = new LineSeries { Title = "f(t)", StrokeThickness = 1 };
-                s2.Color = OxyColor.FromRgb(0, 255, 0);//green
-
-                s2.Points.Add(new DataPoint(42796.4, 50.2));
-                s2.Points.Add(new DataPoint(42796.5, 51.00));
-                s2.Points.Add(new DataPoint(42797.6, 51.400));
-
-                //foreach (var item in _ft)
-                //{
-                //    s1.Points.Add(new DataPoint(item.Key, item.Value));
-                //}
-
-                Plot.Model.Series.Add(s2);
-
-                s3 = new LineSeries { Title = "E(t)", StrokeThickness = 1 };
-                s3.Color = OxyColor.FromRgb(0, 0, 255);//blue
-
-                s3.Points.Add(new DataPoint(42796.4, 50.2));
-                s3.Points.Add(new DataPoint(42796.5, 50.30));
-                s3.Points.Add(new DataPoint(42797.6, 50.500));
-
-                //foreach (var item in _et)
-                //{
-                //    s1.Points.Add(new DataPoint(item.Key, item.Value));
-                //}
-
-                Plot.Model.Series.Add(s3);
+            #endregion
+            //--------------------- Building ----------------------------                               
             }
         }
 
