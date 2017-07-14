@@ -69,7 +69,7 @@ namespace Demonstration
                 int k = 20;
 
                 //critical value
-                double N = 0.02;
+                double N = -10.01;
 
                 //max measurement error
                 double b = 0.025;
@@ -106,8 +106,8 @@ namespace Demonstration
                 cumMinus[0] = 0;
 
                 //v-mask
-                double h = 0.0;
-                double f = 0;
+                double h = 5.0;
+                double f = 0.5;
                 double sigmaE = 0.0;
                 double H = 0;
                 double F = 0;
@@ -130,11 +130,11 @@ namespace Demonstration
                 GraphicsOxiPlot.s2.Color = OxyColor.FromRgb(0, 255, 0);//green
                 Plot.Model.Series.Add(GraphicsOxiPlot.s2);
 
-                GraphicsOxiPlot.s3 = new LineSeries { Title = "", StrokeThickness = 1 };
+                GraphicsOxiPlot.s3 = new LineSeries { Title = "E^(t)", StrokeThickness = 1 };
                 GraphicsOxiPlot.s3.Color = OxyColor.FromRgb(0, 0, 255);//blue
                 Plot.Model.Series.Add(GraphicsOxiPlot.s3);
 
-                GraphicsOxiPlot.s4 = new LineSeries { Title = "", StrokeThickness = 1 };
+                GraphicsOxiPlot.s4 = new LineSeries { Title = "y(t)", StrokeThickness = 1 };
                 GraphicsOxiPlot.s4.Color = OxyColor.FromRgb(255, 125, 255);//pink
                 Plot.Model.Series.Add(GraphicsOxiPlot.s4);
 
@@ -231,15 +231,40 @@ namespace Demonstration
                             Array.Resize(ref average, average.Length + 1);
                             average[average.Length - 1] = x.Average();
 
+                            //remove trend E^(tf + 1) = P(tf + 1) - f(tf + 1)                     
+                            estKsi = _dic[temp1] - average[average.Length - 1];
+
+                            //find E[tf + 1] = E^[tf + 1] + b
+                            ksi = estKsi + b;
+
+                            //CUSUM -- y[tf + 1] = y[tf] + ksi
+                            Array.Resize(ref y, y.Length + 1);
+                            y[y.Length - 1] = Math.Min(0, y[y.Length - 2] + ksi);
+
+                            //check on d(y[t]) = I(y[t] < N), if d(y[t]) = 1 then STOP
+                            if (y[y.Length - 1] < N)
+                            {
+                                MessageBox.Show("Значение y(" + ((temp1 % 1) * 24) + ") = " + y[y.Length - 1] + " меньше, чем N = " + N + ".\nЗначение P(" + ((temp1 % 1) * 24) + ") = " + temp2, "Момент разладки");
+                                break;
+                            }
+                            else
+                            {
+                                //replace X = {P(ts), P(ts+1), ... P(tf)}
+                                int ind = 0;
+                                while (ind < x.Length - 1)
+                                {
+                                    x[ind] = x[ind + 1];
+                                    ind++;
+                                }
+                                if (ind == k - 1)
+                                    x[ind] = temp2;
+                            }
+
                             //average average
                             averageA = average.Average();
 
                             //target
                             target = averageA;
-
-                            //v-mask
-                            H = h * sigmaE;
-                            F = f * sigmaE;
 
                             allsum = 0;
                             //sum of all _dic
@@ -264,29 +289,23 @@ namespace Demonstration
                             averageR = r.Average();
                             sigma0 = averageR / 1.128;
                             sigmaE = sigma0 / Math.Sqrt(x.Length);
-
-                            //remove trend E^(tf + 1) = P(tf + 1) - f(tf + 1)                            
-                            estKsi = _dic[temp1] - average[average.Length - 1];
                             
-                            //find E[tf + 1] = E^[tf + 1] + b
-                            ksi = estKsi + b;
-
-                            //CUSUM -- y[tf + 1] = y[tf] + ksi
-                            Array.Resize(ref y, y.Length + 1);
-                            y[y.Length - 1] = y[y.Length - 2] + ksi;
-
                             //standart deviation for limits
                             sigma = average[average.Length - 1] / 1.128;
                             slack = 0.5 * sigma;
                             h = 4 * sigma;
 
+                            //v-mask
+                            H = h * sigmaE;
+                            F = f * sigmaE;
+
                             //cumPlus
                             Array.Resize(ref cumPlus, cumPlus.Length + 1);
-                            cumPlus[cumPlus.Length - 1] = Math.Max(0, temp2 - target - slack + cumPlus[cumPlus.Length - 2]);
+                            cumPlus[cumPlus.Length - 1] = Math.Max(0, temp2 - target - F + cumPlus[cumPlus.Length - 2]);
 
                             //cumMinus
                             Array.Resize(ref cumMinus, cumMinus.Length + 1);
-                            cumMinus[cumMinus.Length - 1] = Math.Max(0, target - slack - temp2 + cumMinus[cumMinus.Length - 2]);
+                            cumMinus[cumMinus.Length - 1] = Math.Max(0, target - F - temp2 + cumMinus[cumMinus.Length - 2]);
 
                             //upper control limit
                             Array.Resize(ref upper, upper.Length + 1);
@@ -294,32 +313,12 @@ namespace Demonstration
 
                             //lower control limit
                             Array.Resize(ref lower, lower.Length + 1);
-                            lower[lower.Length - 1] = Math.Min(0, lower[lower.Length - 2] + temp2 - target + slack);
-
-
-                            //check on d(y[t]) = I(y[t] < N), if d(y[t]) = 1 then STOP
-                            if (y[y.Length - 1] < N)
-                            {
-                                MessageBox.Show("Значение y("+ temp1 + ") = " + y[y.Length - 1] + " меньше, чем N = " + N + ".\nЗначение P(" + ((temp1 % 1) * 24) + ") = " + temp2, "Момент разладки");
-                                break;
-                            }
-                            else
-                            {
-                                //replace X = {P(ts), P(ts+1), ... P(tf)}
-                                int ind = 0;
-                                while(ind < x.Length - 1)
-                                {
-                                    x[ind] = x[ind + 1];
-                                    ind++;
-                                }
-                                if (ind == k - 1)
-                                    x[ind] = temp2;
-                            }                            
+                            lower[lower.Length - 1] = Math.Min(0, lower[lower.Length - 2] + temp2 - target + slack);                                                     
                         }
                         if (_dic.Count > k && _dic.Count % 1 == 0)
                         {
                             GraphicsOxiPlot.s2.Points.Add(new DataPoint(temp1, average[average.Length - 1]));
-                            //GraphicsOxiPlot.s3.Points.Add(new DataPoint(temp1, cum[cum.Length - 1]));
+                            //GraphicsOxiPlot.s3.Points.Add(new DataPoint(temp1, estKsi));
                             //GraphicsOxiPlot.s4.Points.Add(new DataPoint(temp1, y[y.Length - 1]));
                             //GraphicsOxiPlot.s5.Points.Add(new DataPoint(temp1, cumPlus[cumPlus.Length - 1]));
                             //GraphicsOxiPlot.s6.Points.Add(new DataPoint(temp1, cumMinus[cumMinus.Length - 1]));
